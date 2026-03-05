@@ -1,4 +1,15 @@
-node_modules/
-.env
-*.log
-.DS_Store
+{
+  "name": "contractlens",
+  "version": "1.0.0",
+  "description": "AI 계약서 번역 시스템",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  }
+}
