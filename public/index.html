@@ -231,7 +231,7 @@ function nCell(r,c,v,s){var addr=cellAddr(r,c);return '<c r="'+addr+'" s="'+s+'"
 var rows=[];
 // 헤더행 (s=1: 헤더 스타일)
 rows.push('<row r="1" ht="20" customHeight="1">'+
-  nCell(0,0,'번호',1)+sCell(0,1,'구분',1)+sCell(0,2,'원문',1)+sCell(0,3,'한국어 번역',1)+
+  sCell(0,0,'번호',1)+sCell(0,1,'구분',1)+sCell(0,2,'원문',1)+sCell(0,3,'한국어 번역',1)+
 '</row>');
 
 for(var i=0;i<secs.length;i++){
