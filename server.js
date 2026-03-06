@@ -3,7 +3,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 const path = require('path');
-const FormData = require('form-data');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -18,13 +18,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', engine: 'Gemini 2.5 Flash', api_key_set: !!GEMINI_API_KEY });
 });
 
+// 텍스트 모드 (텍스트 레이어 있는 PDF)
 app.post('/api/translate-text', async (req, res) => {
   if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY 미설정' });
   try {
     const { text } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: '텍스트가 비어있습니다.' });
     console.log('[Text mode] length:', text.length);
+
     const prompt = `아래는 계약서 원문입니다.\n\n${text}\n\n위 계약서를 분석하여 순수 JSON만 반환하세요 (마크다운 없이):\n{"detected_language":"언어명","title_original":"원문제목","title_ko":"한국어제목","sections":[{"type":"heading|subheading|article|clause|paragraph|table|signature","original":"원문","translation":"번역"}],"summary_ko":"핵심요약500자이내"}`;
+
     const response = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -33,8 +36,10 @@ app.post('/api/translate-text', async (req, res) => {
         generationConfig: { temperature: 0.1, maxOutputTokens: 65536 }
       })
     });
+
     const data = await response.json();
     if (!response.ok) return res.status(response.status).json({ error: data.error?.message || 'Gemini API 오류' });
+
     let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
     const m = raw.match(/\{[\s\S]*\}/);
@@ -46,25 +51,29 @@ app.post('/api/translate-text', async (req, res) => {
   }
 });
 
+// 파일 모드 (스캔 PDF / 이미지) - Gemini Files API 사용
 app.post('/api/translate-file', async (req, res) => {
   if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY 미설정' });
   try {
     const { fileBase64, mimeType } = req.body;
     if (!fileBase64) return res.status(400).json({ error: '파일 데이터가 없습니다.' });
+
     const fileBuffer = Buffer.from(fileBase64, 'base64');
     console.log('[File mode] mime:', mimeType, 'size:', fileBuffer.length);
 
-    // Gemini Files API - multipart upload
+    // multipart upload
     const boundary = '----FormBoundary' + Date.now();
     const metaJson = JSON.stringify({ file: { mimeType: mimeType } });
     const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=utf-8\r\n\r\n${metaJson}\r\n`;
     const filePart = `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`;
     const closing = `\r\n--${boundary}--`;
 
-    const metaBuf = Buffer.from(metaPart, 'utf-8');
-    const filePartBuf = Buffer.from(filePart, 'utf-8');
-    const closingBuf = Buffer.from(closing, 'utf-8');
-    const body = Buffer.concat([metaBuf, filePartBuf, fileBuffer, closingBuf]);
+    const body = Buffer.concat([
+      Buffer.from(metaPart, 'utf-8'),
+      Buffer.from(filePart, 'utf-8'),
+      fileBuffer,
+      Buffer.from(closing, 'utf-8')
+    ]);
 
     const uploadRes = await fetch(
       `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=multipart&key=${GEMINI_API_KEY}`,
@@ -107,8 +116,8 @@ app.post('/api/translate-file', async (req, res) => {
 
     let raw = genData.candidates?.[0]?.content?.parts?.[0]?.text || '';
     raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (m) raw = m[0];
+    const m2 = raw.match(/\{[\s\S]*\}/);
+    if (m2) raw = m2[0];
     try { return res.json(JSON.parse(raw)); }
     catch(e) { return res.status(500).json({ error: 'JSON 파싱 실패: ' + e.message }); }
   } catch(err) {
