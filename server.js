@@ -25,20 +25,22 @@ app.post('/api/translate', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: parts }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 8192,
-          responseMimeType: 'application/json'
-        }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
       })
     });
     const data = await response.json();
     if (!response.ok) {
       return res.status(response.status).json({ error: data.error?.message || 'Gemini API 오류' });
     }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('[Gemini raw]', text.substring(0, 300));
+    // 서버에서 JSON 추출 시도
+    text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) text = match[0];
     res.json({ text });
   } catch (err) {
+    console.error('[Error]', err.message);
     res.status(500).json({ error: '서버 오류: ' + err.message });
   }
 });
