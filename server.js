@@ -25,7 +25,7 @@ app.post('/api/translate', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: parts }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 16384 }
       })
     });
     const data = await response.json();
@@ -34,11 +34,20 @@ app.post('/api/translate', async (req, res) => {
     }
     let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log('[Gemini raw]', text.substring(0, 300));
-    // 서버에서 JSON 추출 시도
+    console.log('[Gemini length]', text.length);
+    // 서버에서 JSON 파싱 후 전송
     text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
     const match = text.match(/\{[\s\S]*\}/);
     if (match) text = match[0];
-    res.json({ text });
+    try {
+      const parsed = JSON.parse(text);
+      // 파싱 성공 시 객체 직접 전송
+      return res.json(parsed);
+    } catch(e) {
+      console.error('[Parse error]', e.message);
+      console.error('[Raw text]', text.substring(0, 500));
+      return res.status(500).json({ error: 'JSON 파싱 실패: ' + e.message });
+    }
   } catch (err) {
     console.error('[Error]', err.message);
     res.status(500).json({ error: '서버 오류: ' + err.message });
