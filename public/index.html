@@ -454,16 +454,10 @@ async function callGeminiAPI(images, mimes){
     body: JSON.stringify({ parts: parts })
   });
 
-var data = await resp.json();
+  var data = await resp.json();
   if(!resp.ok) throw new Error(data.error||'API 오류: '+resp.status);
   if(data.error) throw new Error(data.error);
-  // 서버가 이미 파싱된 객체를 반환
   return data;
-  catch(e){
-    var m=cleaned.match(/\{[\s\S]*\}/);
-    if(m) try{ return JSON.parse(m[0]); }catch(e2){}
-    throw new Error('번역 결과 파싱 실패. 다시 시도해주세요.');
-  }
 }
 
 // ── WORD 문서 생성 ────────────────────────────────────────────
