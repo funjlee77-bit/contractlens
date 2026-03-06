@@ -182,7 +182,121 @@ var wRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships
 zip.file('[Content_Types].xml',ct);zip.file('_rels/.rels',rels);zip.file('word/document.xml',docXml);zip.file('word/styles.xml',stylesXml);zip.file('word/_rels/document.xml.rels',wRels);
 return await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});}
 
-function makeExcelDoc(data,projName,docName){var wb=XLSX.utils.book_new();var now=new Date().toLocaleDateString('ko-KR');var secs=data.sections||[];var tmap2={heading:'제목',subheading:'소제목',article:'조항',clause:'세부항목',paragraph:'문단',table:'표',signature:'서명란'};var rows=[['계약서 번역 대조표','','',''],['프로젝트: '+projName,'','서류명: '+docName,''],['원본 언어: '+(data.detected_language||''),'','번역 일시: '+now,''],['원문 제목: '+(data.title_original||''),'','번역 제목: '+(data.title_ko||''),''],[] ,['번호','구분','원문','한국어 번역']];for(var i=0;i<secs.length;i++){rows.push([i+1,tmap2[secs[i].type]||'기타',secs[i].original||'',secs[i].translation||'']);}var ws1=XLSX.utils.aoa_to_sheet(rows);ws1['!cols']=[{wch:5},{wch:12},{wch:50},{wch:55}];ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:3}},{s:{r:1,c:0},e:{r:1,c:1}},{s:{r:1,c:2},e:{r:1,c:3}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:3,c:0},e:{r:3,c:1}},{s:{r:3,c:2},e:{r:3,c:3}}];XLSX.utils.book_append_sheet(wb,ws1,'번역 대조표');var arr=XLSX.write(wb,{bookType:'xlsx',type:'array'});return new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});}
+function makeExcelDoc(data,projName,docName){
+var secs=data.sections||[];
+var tmap2={heading:'제목',subheading:'소제목',article:'조항',clause:'세부항목',paragraph:'문단',table:'표',signature:'서명란'};
+var now=new Date().toLocaleDateString('ko-KR');
+
+// ── 스타일 정의 ──────────────────────────────────────────────
+var styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="3">
+    <font><sz val="10"/><name val="맑은 고딕"/></font>
+    <font><sz val="10"/><b/><color rgb="FFFFFFFF"/><name val="맑은 고딕"/></font>
+    <font><sz val="10"/><b/><name val="맑은 고딕"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1A2D42"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FFB0B0B0"/></left>
+      <right style="thin"><color rgb="FFB0B0B0"/></right>
+      <top style="thin"><color rgb="FFB0B0B0"/></top>
+      <bottom style="thin"><color rgb="FFB0B0B0"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="6">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="top"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="left" vertical="top"/></xf>
+  </cellXfs>
+</styleSheet>`;
+
+// ── 셀 헬퍼 ──────────────────────────────────────────────────
+function col(n){var s='';while(n>=0){s=String.fromCharCode(65+(n%26))+s;n=Math.floor(n/26)-1;}return s;}
+function cellAddr(r,c){return col(c)+(r+1);}
+function sCell(r,c,v,s){var addr=cellAddr(r,c);var val=String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');return '<c r="'+addr+'" s="'+s+'" t="inlineStr"><is><t>'+val+'</t></is></c>';}
+function nCell(r,c,v,s){var addr=cellAddr(r,c);return '<c r="'+addr+'" s="'+s+'"><v>'+Number(v)+'</v></c>';}
+
+// ── 행 생성 ───────────────────────────────────────────────────
+var rows=[];
+// 헤더행 (s=1: 헤더 스타일)
+rows.push('<row r="1" ht="20" customHeight="1">'+
+  nCell(0,0,'번호',1)+sCell(0,1,'구분',1)+sCell(0,2,'원문',1)+sCell(0,3,'한국어 번역',1)+
+'</row>');
+
+for(var i=0;i<secs.length;i++){
+  var ri=i+1;
+  var cat=tmap2[secs[i].type]||'기타';
+  var orig=(secs[i].original||'');
+  var tran=(secs[i].translation||'');
+  rows.push('<row r="'+(ri+1)+'" ht="auto">'+
+    nCell(ri,0,i+1,2)+   // 번호: 중앙/상단
+    sCell(ri,1,cat,3)+   // 구분: 좌/상단
+    sCell(ri,2,orig,3)+  // 원문: 좌/상단
+    sCell(ri,3,tran,3)+  // 번역: 좌/상단
+  '</row>');
+}
+
+// ── sheet1 XML ────────────────────────────────────────────────
+var sheetXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <cols>
+    <col min="1" max="1" width="6" customWidth="1"/>
+    <col min="2" max="2" width="12" customWidth="1"/>
+    <col min="3" max="3" width="55" customWidth="1"/>
+    <col min="4" max="4" width="55" customWidth="1"/>
+  </cols>
+  <sheetData>`+rows.join('')+`</sheetData>
+</worksheet>`;
+
+// ── workbook / rels ───────────────────────────────────────────
+var wbXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="번역 대조표" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`;
+
+var ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`;
+
+var rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+var wbRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+var zip=new JSZip();
+zip.file('[Content_Types].xml',ct);
+zip.file('_rels/.rels',rels);
+zip.file('xl/workbook.xml',wbXml);
+zip.file('xl/styles.xml',styles);
+zip.file('xl/worksheets/sheet1.xml',sheetXml);
+zip.file('xl/_rels/workbook.xml.rels',wbRels);
+return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+
 
 function makeFileName(p,d){function cl(s){return String(s).replace(/\s+/g,'').replace(/[\\/:*?"<>|]/g,'_');}return'P-'+cl(p)+'_'+cl(d);}
 render();
