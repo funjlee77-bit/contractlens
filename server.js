@@ -43,7 +43,7 @@ app.post('/api/translate', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: parts }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 16384 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 65536 }
       })
     });
 
