@@ -454,12 +454,11 @@ async function callGeminiAPI(images, mimes){
     body: JSON.stringify({ parts: parts })
   });
 
-  var data = await resp.json();
+var data = await resp.json();
   if(!resp.ok) throw new Error(data.error||'API 오류: '+resp.status);
-
-  var raw = data.text || '';
-  var cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-  try { return JSON.parse(cleaned); }
+  if(data.error) throw new Error(data.error);
+  // 서버가 이미 파싱된 객체를 반환
+  return data;
   catch(e){
     var m=cleaned.match(/\{[\s\S]*\}/);
     if(m) try{ return JSON.parse(m[0]); }catch(e2){}
